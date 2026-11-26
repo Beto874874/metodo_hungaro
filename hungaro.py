@@ -1,14 +1,19 @@
 """
 Programa de asignación óptima con el método húngaro
-Avance 1 — núcleo del algoritmo, modo paso a paso e instancias de prueba
+Núcleo del algoritmo, modo paso a paso, instancias de prueba y entrada de datos.
 
 Uso:
-    python hungaro.py            -> resuelve las instancias de ejemplo
-    python hungaro.py --pasos    -> muestra cada paso del método
+    python hungaro.py                       -> instancias de ejemplo
+    python hungaro.py --pasos               -> ejemplo mostrando cada paso
+    python hungaro.py --csv datos.csv       -> resuelve una matriz desde CSV
+    python hungaro.py --menu                -> menú (CSV o entrada por consola)
 """
 
+import argparse
 import sys
 from itertools import permutations
+
+from entrada import leer_consola, leer_csv, pedir_objetivo
 
 M_GRANDE = 10**9  # costo para asignaciones prohibidas
 
@@ -202,14 +207,15 @@ def fuerza_bruta(costos, maximizar=False):
     return mejor
 
 
-def mostrar_resultado(resultado, total, unidad):
+def mostrar_resultado(resultado, total, unidad=""):
+    sufijo = f" {unidad}" if unidad else ""
     print()
     for agente, tarea, costo in resultado:
         if costo is None:
             print(f"  {agente:<13} -> {tarea:<10} (sin asignar)")
         else:
-            print(f"  {agente:<13} -> {tarea:<10} {costo} {unidad}")
-    print(f"  {'TOTAL':<27} {total} {unidad}")
+            print(f"  {agente:<13} -> {tarea:<10} {costo}{sufijo}")
+    print(f"  {'TOTAL':<27} {total}{sufijo}")
 
 
 # ---------------------------------------------------------------------------
@@ -247,17 +253,108 @@ INSTANCIAS = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# Interfaz de línea de comandos
+# ---------------------------------------------------------------------------
+def resolver_instancia(costos, filas, columnas, maximizar=False, unidad="",
+                       pasos=False, titulo=""):
+    """Resuelve una instancia reutilizando el algoritmo y muestra el resultado."""
+    if titulo:
+        print("=" * 70)
+        print(titulo)
+        print("=" * 70)
+    try:
+        resultado, total = metodo_hungaro(costos, filas, columnas, maximizar,
+                                          mostrar_pasos=pasos)
+    except ValueError as exc:
+        raise ValueError(f"No se pudo resolver la instancia: {exc}") from exc
+    if any(costo is None for _, _, costo in resultado[:len(costos)]):
+        raise ValueError("No existe una asignación que respete las celdas prohibidas")
+    mostrar_resultado(resultado, total, unidad)
+    if len(costos) == len(costos[0]):
+        fb = fuerza_bruta(costos, maximizar)
+        print(f"  Verificación por fuerza bruta: {fb} -> "
+              f"{'OK' if fb == total else 'ERROR'}")
+    print()
+    return resultado, total
+
+
+def modo_interactivo():
+    """Menú simple: elegir fuente de datos, objetivo y si se muestran los pasos."""
+    while True:
+        print("\n" + "=" * 70)
+        print("MENÚ — asignación óptima")
+        print("1) Leer la matriz desde un archivo CSV")
+        print("2) Introducir la matriz por consola")
+        print("0) Salir")
+        opcion = input("Opción: ").strip()
+        if opcion == "0":
+            return
+
+        try:
+            if opcion == "1":
+                ruta = input("Ruta del archivo CSV: ").strip().strip('"').strip("'")
+                costos, filas, columnas = leer_csv(ruta)
+                maximizar = pedir_objetivo()
+                titulo = f"CSV: {ruta}"
+            elif opcion == "2":
+                costos, filas, columnas, maximizar = leer_consola()
+                titulo = "Matriz introducida por consola"
+            else:
+                print("Opción no válida: escriba 1, 2 o 0.")
+                continue
+            unidad = input("Unidad del resultado (Enter para ninguna): ").strip()
+            pasos = input("¿Mostrar los pasos del método? (s/n) [n]: ").strip().lower()
+            resolver_instancia(costos, filas, columnas, maximizar, unidad,
+                               pasos in ("s", "si", "sí"), titulo)
+        except ValueError as exc:
+            print(f"Error: {exc}")
+        input("\nPulse Enter para volver al menú...")
+
+
+def construir_parser():
+    parser = argparse.ArgumentParser(
+        description="Resuelve problemas de asignación con el método húngaro."
+    )
+    fuente = parser.add_mutually_exclusive_group()
+    fuente.add_argument("--csv", metavar="ARCHIVO",
+                        help="leer la matriz de costos desde un archivo CSV")
+    fuente.add_argument("--menu", action="store_true",
+                        help="mostrar el menú interactivo (CSV o consola)")
+    parser.add_argument("--objetivo", choices=("min", "max"), default="min",
+                        help="minimizar (por defecto) o maximizar")
+    parser.add_argument("--unidad", default="",
+                        help="unidad del resultado, por ejemplo h, km o M$")
+    parser.add_argument("--pasos", action="store_true",
+                        help="mostrar las matrices de cada paso del método")
+    return parser
+
+
+def main(argv=None):
+    args = construir_parser().parse_args(argv)
+    try:
+        if args.menu:
+            modo_interactivo()
+        elif args.csv:
+            costos, filas, columnas = leer_csv(args.csv)
+            resolver_instancia(costos, filas, columnas, args.objetivo == "max",
+                               args.unidad, args.pasos, f"CSV: {args.csv}")
+        else:
+            for inst in INSTANCIAS:
+                resolver_instancia(inst["costos"], inst["filas"], inst["columnas"],
+                                   inst["maximizar"], inst["unidad"], args.pasos,
+                                   inst["nombre"])
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    except EOFError:
+        print("Error: entrada terminada antes de completar los datos.", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        print("\nOperación cancelada por el usuario.", file=sys.stderr)
+        return 1
+    return 0
+
+
 if __name__ == "__main__":
-    pasos = "--pasos" in sys.argv
-    for inst in INSTANCIAS:
-        print("=" * 70)
-        print(inst["nombre"])
-        print("=" * 70)
-        res, total = metodo_hungaro(inst["costos"], inst["filas"], inst["columnas"],
-                                    inst["maximizar"], mostrar_pasos=pasos)
-        mostrar_resultado(res, total, inst["unidad"])
-        if len(inst["costos"]) == len(inst["costos"][0]):
-            fb = fuerza_bruta(inst["costos"], inst["maximizar"])
-            print(f"  Verificación por fuerza bruta: {fb} -> "
-                  f"{'OK' if fb == total else 'ERROR'}")
-        print()
+    sys.exit(main())

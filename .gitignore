@@ -1,2 +1,31 @@
+# Python
 __pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
 
+# Entornos virtuales
+.venv/
+venv/
+env/
+ENV/
+
+# Empaquetado y build
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Pruebas y cobertura
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Editores, sistema y logs
+.idea/
+.vscode/
+*.log
+*.swp
+.DS_Store
